@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bucket Sort Visualizer</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <style>
+    /* Optional minor tweaks */
+    .scrollbar-thin::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50">
+
+<div id="app">
+  <div class="min-h-screen text-slate-900 p-6">
+    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- LEFT: Info -->
+      <aside class="lg:col-span-1 p-6 bg-white rounded-2xl shadow">
+        <h1 class="text-2xl font-bold mb-2">Bucket Sort — Visualizer</h1>
+        <p class="text-sm text-slate-600 mb-4">
+          Mô phỏng thuật toán Bucket Sort với các bước: phân vào bucket, sắp xếp từng bucket, rồi gộp lại.
+        </p>
+
+        <section class="mb-4">
+          <h2 class="font-semibold">Ý tưởng (giống demo USF)</h2>
+          <ul class="list-disc ml-5 text-sm text-slate-700 space-y-1">
+            <li>Mảng ban đầu hiển thị ở hàng trên.</li>
+            <li>Mỗi phần tử lần lượt “di chuyển” xuống bucket tương ứng.</li>
+            <li>Trong mỗi bucket, các phần tử được sắp xếp tăng dần.</li>
+            <li>Cuối cùng, các phần tử trong bucket được gộp lại thành mảng kết quả.</li>
+          </ul>
+        </section>
+
+        <section class="mb-4">
+          <h2 class="font-semibold">Độ phức tạp</h2>
+          <div class="text-sm text-slate-700">
+            Best: O(n) · Average: O(n + k) · Worst: O(n²)
+          </div>
+        </section>
+
+        <section>
+          <h2 class="font-semibold">Gợi ý</h2>
+          <ul class="list-disc ml-5 text-sm text-slate-700 space-y-1">
+            <li>Nhấn <b>Start</b> rồi dùng <b>Play / Pause</b> hoặc nút ◀︎/▶︎ để đi từng bước.</li>
+            <li>Thay đổi số bucket để xem phân phối khác nhau.</li>
+            <li>Randomize để tạo mảng mới trong [0, 1).</li>
+          </ul>
+        </section>
+      </aside>
+
+      <!-- RIGHT: Visualizer -->
+      <main class="lg:col-span-2 p-6 bg-white rounded-2xl shadow">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Bucket Sort — Mô phỏng từng bước</h2>
+          <div class="text-sm text-slate-600">
+            Bước: {{ stepIndex }} / {{ Math.max(0, steps.length - 1) }}
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-wrap gap-3 mb-4 items-center">
+          <button class="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                  @click="randomize(10)">
+            Randomize
+          </button>
+          <button class="px-3 py-2 bg-slate-200 rounded hover:bg-slate-300"
+                  @click="resetVisualizer">
+            Reset
+          </button>
+          <button class="px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                  @click="startSimulation">
+            Start
+          </button>
+          <button class="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                  @click="togglePlay">
+            {{ playing ? 'Pause' : 'Play' }}
+          </button>
+          <button class="px-3 py-2 bg-slate-200 rounded hover:bg-slate-300"
+                  @click="stepBack">
+            ◀︎
+          </button>
+          <button class="px-3 py-2 bg-slate-200 rounded hover:bg-slate-300"
+                  @click="stepForward">
+            ▶︎
+          </button>
+
+          <label class="flex items-center gap-2 ml-2 text-sm">
+            Buckets
+            <input
+              type="number"
+              v-model.number="nBucketsLocal"
+              min="1"
+              max="20"
+              class="w-20 p-1 border rounded"
+              @change="changeBuckets"
+            />
+          </label>
+
+          <label class="flex items-center gap-2 text-sm">
+            Speed (ms)
+            <input type="range" min="50" max="1200" v-model.number="speed" />
+          </label>
+        </div>
+
+        <!-- Array row (top) -->
+        <div class="mb-6">
+          <div class="mb-2 text-sm font-medium">Mảng (trên) — giống hàng trên trong demo USF</div>
+          <div class="flex gap-2 justify-center">
+            <div
+              v-for="(v, i) in current.arr"
+              :key="i"
+              class="flex flex-col items-center"
+            >
+              <div
+                :class="[
+                  'w-12 h-12 rounded border flex items-center justify-center text-sm font-medium transition-transform',
+                  isHighlight(i) ? 'bg-amber-200 border-amber-500 scale-105' : 'bg-sky-100 border-sky-400'
+                ]"
+              >
+                {{ v.toFixed(2) }}
+              </div>
+              <div class="text-[10px] text-slate-500 mt-1">[{{ i }}]</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buckets row (bottom) -->
+        <div class="mb-4">
+          <div class="mb-2 text-sm font-medium">
+            Buckets (dưới) — các cột giống như trong demo USF
+          </div>
+          <div class="flex gap-3 overflow-x-auto scrollbar-thin">
+            <div
+              v-for="bi in bucketIndices"
+              :key="bi"
+              class="min-w-[90px] flex-1"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <div class="text-xs font-semibold">Bucket {{ bi }}</div>
+                <div class="text-[10px] text-slate-500">
+                  {{ getBucketContent(bi).length }} items
+                </div>
+              </div>
+
+              <div
+                :class="[
+                  'h-40 rounded border flex flex-col-reverse items-center px-1 py-2 gap-1',
+                  isActiveBucket(bi) ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+                ]"
+              >
+                <div
+                  v-for="(x, i) in getBucketContent(bi)"
+                  :key="i"
+                  :class="[
+                    'w-12 h-8 rounded flex items-center justify-center text-xs border transition-transform',
+                    isSortingBucket(bi) ? 'bg-emerald-200 border-emerald-500' : 'bg-white border-slate-300'
+                  ]"
+                >
+                  {{ x.toFixed(2) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Explanation -->
+        <div class="mt-6 p-4 bg-slate-50 rounded">
+          <div class="font-semibold mb-2">Giải thích bước hiện tại</div>
+          <div class="text-sm text-slate-700">
+            {{ explainCurrent() }}
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, watch } = Vue
+
+createApp({
+  setup () {
+    // ------------- state -------------
+    const arr = ref([0.78,0.17,0.39,0.26,0.72,0.94,0.21,0.12,0.23,0.68])
+    const nBucketsLocal = ref(5)
+    const steps = ref([])
+    const stepIndex = ref(0)
+    const playing = ref(false)
+    const speed = ref(600)
+    let timer = null
+
+    // ------------- helpers -------------
+    function clampArrayTo01 (a) {
+      return a.map(x => Math.max(0, Math.min(1, Number(x))))
+    }
+
+    function resetVisualizer () {
+      arr.value = clampArrayTo01(arr.value)
+      steps.value = []
+      stepIndex.value = 0
+      playing.value = false
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+
+    function randomize (n = 10) {
+      arr.value = Array.from({ length: n }, () => Math.random())
+      resetVisualizer()
+    }
+
+    function changeBuckets () {
+      if (nBucketsLocal.value < 1) nBucketsLocal.value = 1
+      if (nBucketsLocal.value > 20) nBucketsLocal.value = 20
+      resetVisualizer()
+    }
+
+    // ------------- step generation (USF-like flow) -------------
+    function generateSteps (input = arr.value, bucketsCount = nBucketsLocal.value) {
+      const stepsOut = []
+      const a = input.slice()
+
+      // Init: empty buckets
+      const emptyBuckets = Array.from({ length: bucketsCount }, () => [])
+      stepsOut.push({
+        type: 'init',
+        arr: a.slice(),
+        buckets: emptyBuckets
+      })
+
+      // Place each element into buckets
+      for (let i = 0; i < a.length; i++) {
+        const x = a[i]
+        const xClamped = Math.min(0.999999, Math.max(0, Number(x)))
+        let idx = Math.floor(xClamped * bucketsCount)
+
+        const prevBuckets = stepsOut[stepsOut.length - 1].buckets.map(b => b.slice())
+        prevBuckets[idx].push(x)
+
+        stepsOut.push({
+          type: 'place',
+          index: i,
+          value: x,
+          toBucket: idx,
+          arr: a.slice(),
+          buckets: prevBuckets.map(b => b.slice())
+        })
+      }
+
+      // Sort each bucket
+      for (let b = 0; b < bucketsCount; b++) {
+        const prev = stepsOut[stepsOut.length - 1].buckets.map(x => x.slice())
+        const sorted = prev[b].slice().sort((u, v) => u - v)
+        const newBuckets = prev.map(x => x.slice())
+        newBuckets[b] = sorted
+
+        stepsOut.push({
+          type: 'sortBucket',
+          bucket: b,
+          arr: a.slice(),
+          buckets: newBuckets.map(x => x.slice())
+        })
+      }
+
+      // Merge buckets back into array (like USF: final pass)
+      const finalBuckets = stepsOut[stepsOut.length - 1].buckets.map(x => x.slice())
+      const outArr = a.slice()
+      let pos = 0
+
+      for (let b = 0; b < bucketsCount; b++) {
+        for (const v of finalBuckets[b]) {
+          outArr[pos] = v
+          stepsOut.push({
+            type: 'merge',
+            fromBucket: b,
+            value: v,
+            writeIndex: pos,        // so we can highlight where it goes
+            arr: outArr.slice(),
+            buckets: finalBuckets.map(x => x.slice())
+          })
+          pos++
+        }
+      }
+
+      stepsOut.push({
+        type: 'done',
+        arr: outArr.slice(),
+        buckets: finalBuckets.map(x => x.slice())
+      })
+
+      return stepsOut
+    }
+
+    // ------------- playback controls -------------
+    function startSimulation () {
+      steps.value = generateSteps(arr.value, nBucketsLocal.value)
+      stepIndex.value = 0
+      playing.value = true
+      startTimer()
+    }
+
+    function startTimer () {
+      if (timer) clearInterval(timer)
+      timer = setInterval(() => {
+        if (!playing.value) return
+        if (stepIndex.value + 1 >= steps.value.length) {
+          playing.value = false
+          clearInterval(timer)
+          timer = null
+          return
+        }
+        stepIndex.value++
+      }, speed.value)
+    }
+
+    watch([playing, speed], ([p]) => {
+      if (p) startTimer()
+      else if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    })
+
+    function togglePlay () {
+      if (!steps.value.length) {
+        steps.value = generateSteps(arr.value, nBucketsLocal.value)
+        stepIndex.value = 0
+      }
+      playing.value = !playing.value
+    }
+
+    function stepForward () {
+      if (!steps.value.length) {
+        steps.value = generateSteps(arr.value, nBucketsLocal.value)
+        stepIndex.value = 0
+        return
+      }
+      stepIndex.value = Math.min(steps.value.length - 1, stepIndex.value + 1)
+    }
+
+    function stepBack () {
+      stepIndex.value = Math.max(0, stepIndex.value - 1)
+    }
+
+    // ------------- derived state / helpers for view -------------
+    const current = computed(() => {
+      if (steps.value.length) return steps.value[stepIndex.value]
+      return {
+        type: 'init',
+        arr: arr.value.slice(),
+        buckets: Array.from({ length: nBucketsLocal.value }, () => [])
+      }
+    })
+
+    const bucketIndices = computed(() =>
+      Array.from({ length: nBucketsLocal.value }, (_, i) => i)
+    )
+
+    function isHighlight (i) {
+      const cur = current.value
+      if (cur.type === 'place' && cur.index === i) return true
+      if (cur.type === 'merge' && cur.writeIndex === i) return true
+      return false
+    }
+
+    function getBucketContent (bi) {
+      const cur = current.value
+      if (!cur.buckets || !cur.buckets[bi]) return []
+      return cur.buckets[bi]
+    }
+
+    function isSortingBucket (bi) {
+      const cur = current.value
+      return cur.type === 'sortBucket' && cur.bucket === bi
+    }
+
+    function isActiveBucket (bi) {
+      const cur = current.value
+      if (cur.type === 'place' && cur.toBucket === bi) return true
+      if (cur.type === 'merge' && cur.fromBucket === bi) return true
+      return false
+    }
+
+    function explainCurrent () {
+      const cur = current.value
+      if (!cur) return 'Chưa có bước nào.'
+      switch (cur.type) {
+        case 'init':
+          return 'Khởi tạo các bucket rỗng.'
+        case 'place':
+          return `Đưa phần tử arr[${cur.index}] = ${cur.value.toFixed(
+            2
+          )} vào bucket ${cur.toBucket}.`
+        case 'sortBucket':
+          return `Sắp xếp các phần tử trong bucket ${cur.bucket}.`
+        case 'merge':
+          return `Gộp phần tử ${cur.value.toFixed(
+            2
+          )} từ bucket ${cur.fromBucket} vào vị trí index = ${cur.writeIndex} của mảng kết quả.`
+        case 'done':
+          return `Hoàn thành. Mảng đã sắp xếp: [${cur.arr
+            .map(x => x.toFixed(2))
+            .join(', ')}]`
+        default:
+          return JSON.stringify(cur)
+      }
+    }
+
+    return {
+      arr,
+      nBucketsLocal,
+      steps,
+      stepIndex,
+      playing,
+      speed,
+      randomize,
+      resetVisualizer,
+      changeBuckets,
+      startSimulation,
+      togglePlay,
+      stepForward,
+      stepBack,
+      current,
+      bucketIndices,
+      isHighlight,
+      getBucketContent,
+      isSortingBucket,
+      isActiveBucket,
+      explainCurrent
+    }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>
