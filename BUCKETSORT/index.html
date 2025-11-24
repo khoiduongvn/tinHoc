@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Bucket Sort Visualizer</title>
+  <title>Bucket Sort Visualizer (Integers)</title>
 
   <!-- TailwindCSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -28,9 +28,9 @@
     <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- LEFT: Info -->
       <aside class="lg:col-span-1 p-6 bg-white rounded-2xl shadow">
-        <h1 class="text-2xl font-bold mb-2">Bucket Sort — Visualizer</h1>
+        <h1 class="text-2xl font-bold mb-2">Bucket Sort — Visualizer (Integers)</h1>
         <p class="text-sm text-slate-600 mb-4">
-          Mô phỏng thuật toán Bucket Sort với các bước: phân vào bucket, sắp xếp từng bucket, rồi gộp lại.
+          Mô phỏng thuật toán Bucket Sort với số nguyên trong [0, 1000]: phân vào bucket, sắp xếp từng bucket, rồi gộp lại.
         </p>
 
         <section class="mb-4">
@@ -55,7 +55,7 @@
           <ul class="list-disc ml-5 text-sm text-slate-700 space-y-1">
             <li>Nhấn <b>Start</b> rồi dùng <b>Play / Pause</b> hoặc nút ◀︎/▶︎ để đi từng bước.</li>
             <li>Thay đổi số bucket để xem phân phối khác nhau.</li>
-            <li>Randomize để tạo mảng mới trong [0, 1).</li>
+            <li>Randomize để tạo mảng mới với số nguyên trong [0, 1000].</li>
           </ul>
         </section>
       </aside>
@@ -130,7 +130,7 @@
                   isHighlight(i) ? 'bg-amber-200 border-amber-500 scale-105' : 'bg-sky-100 border-sky-400'
                 ]"
               >
-                {{ v.toFixed(2) }}
+                {{ v }}
               </div>
               <div class="text-[10px] text-slate-500 mt-1">[{{ i }}]</div>
             </div>
@@ -169,7 +169,7 @@
                     isSortingBucket(bi) ? 'bg-emerald-200 border-emerald-500' : 'bg-white border-slate-300'
                   ]"
                 >
-                  {{ x.toFixed(2) }}
+                  {{ x }}
                 </div>
               </div>
             </div>
@@ -194,7 +194,7 @@ const { createApp, ref, computed, watch } = Vue
 createApp({
   setup () {
     // ------------- state -------------
-    const arr = ref([0.78,0.17,0.39,0.26,0.72,0.94,0.21,0.12,0.23,0.68])
+    const arr = ref([780, 170, 390, 260, 720, 940, 210, 120, 230, 680]) // integers
     const nBucketsLocal = ref(5)
     const steps = ref([])
     const stepIndex = ref(0)
@@ -202,13 +202,7 @@ createApp({
     const speed = ref(600)
     let timer = null
 
-    // ------------- helpers -------------
-    function clampArrayTo01 (a) {
-      return a.map(x => Math.max(0, Math.min(1, Number(x))))
-    }
-
     function resetVisualizer () {
-      arr.value = clampArrayTo01(arr.value)
       steps.value = []
       stepIndex.value = 0
       playing.value = false
@@ -219,7 +213,8 @@ createApp({
     }
 
     function randomize (n = 10) {
-      arr.value = Array.from({ length: n }, () => Math.random())
+      // random integers in [0, 1000]
+      arr.value = Array.from({ length: n }, () => Math.floor(Math.random() * 1001))
       resetVisualizer()
     }
 
@@ -229,12 +224,13 @@ createApp({
       resetVisualizer()
     }
 
-    // ------------- step generation (USF-like flow) -------------
+    // ------------- step generation (USF-like flow, with integers) -------------
     function generateSteps (input = arr.value, bucketsCount = nBucketsLocal.value) {
       const stepsOut = []
       const a = input.slice()
+      const maxVal = Math.max(...a, 0)
 
-      // Init: empty buckets
+      // init: empty buckets
       const emptyBuckets = Array.from({ length: bucketsCount }, () => [])
       stepsOut.push({
         type: 'init',
@@ -242,11 +238,16 @@ createApp({
         buckets: emptyBuckets
       })
 
-      // Place each element into buckets
+      // place: assign integer to bucket based on value / (maxVal+1)
       for (let i = 0; i < a.length; i++) {
         const x = a[i]
-        const xClamped = Math.min(0.999999, Math.max(0, Number(x)))
-        let idx = Math.floor(xClamped * bucketsCount)
+        let idx = 0
+        if (maxVal > 0) {
+          const ratio = x / (maxVal + 1)
+          idx = Math.floor(ratio * bucketsCount)
+        }
+        if (idx < 0) idx = 0
+        if (idx >= bucketsCount) idx = bucketsCount - 1
 
         const prevBuckets = stepsOut[stepsOut.length - 1].buckets.map(b => b.slice())
         prevBuckets[idx].push(x)
@@ -261,7 +262,7 @@ createApp({
         })
       }
 
-      // Sort each bucket
+      // sort each bucket
       for (let b = 0; b < bucketsCount; b++) {
         const prev = stepsOut[stepsOut.length - 1].buckets.map(x => x.slice())
         const sorted = prev[b].slice().sort((u, v) => u - v)
@@ -276,7 +277,7 @@ createApp({
         })
       }
 
-      // Merge buckets back into array (like USF: final pass)
+      // merge buckets back into array
       const finalBuckets = stepsOut[stepsOut.length - 1].buckets.map(x => x.slice())
       const outArr = a.slice()
       let pos = 0
@@ -288,7 +289,7 @@ createApp({
             type: 'merge',
             fromBucket: b,
             value: v,
-            writeIndex: pos,        // so we can highlight where it goes
+            writeIndex: pos,
             arr: outArr.slice(),
             buckets: finalBuckets.map(x => x.slice())
           })
@@ -402,19 +403,13 @@ createApp({
         case 'init':
           return 'Khởi tạo các bucket rỗng.'
         case 'place':
-          return `Đưa phần tử arr[${cur.index}] = ${cur.value.toFixed(
-            2
-          )} vào bucket ${cur.toBucket}.`
+          return `Đưa phần tử arr[${cur.index}] = ${cur.value} vào bucket ${cur.toBucket}.`
         case 'sortBucket':
           return `Sắp xếp các phần tử trong bucket ${cur.bucket}.`
         case 'merge':
-          return `Gộp phần tử ${cur.value.toFixed(
-            2
-          )} từ bucket ${cur.fromBucket} vào vị trí index = ${cur.writeIndex} của mảng kết quả.`
+          return `Gộp phần tử ${cur.value} từ bucket ${cur.fromBucket} vào vị trí index = ${cur.writeIndex} của mảng kết quả.`
         case 'done':
-          return `Hoàn thành. Mảng đã sắp xếp: [${cur.arr
-            .map(x => x.toFixed(2))
-            .join(', ')}]`
+          return `Hoàn thành. Mảng đã sắp xếp: [${cur.arr.join(', ')}]`
         default:
           return JSON.stringify(cur)
       }
